@@ -6,6 +6,7 @@ from hls4ml.converters.onnx_to_hls import get_constant_value, get_onnx_attribute
 def _get_slice_constant(graph, name):
     """Read a constant value from either a graph initializer or a Constant op output."""
     from onnx import numpy_helper  # local import avoids shadowing by converters/onnx/ subfolder
+
     # Check initializer first (weights / pre-set constants)
     tensor = next((x for x in graph.initializer if x.name == name), None)
     if tensor is not None:
@@ -86,17 +87,14 @@ def parse_slice_layer(node, input_names, input_shapes, graph):
 
     # Read starts, ends, axes from constant op outputs (ONNX opset 10+ format)
     starts = _get_slice_constant(graph, node.input[1])
-    ends   = _get_slice_constant(graph, node.input[2])
-    axes   = _get_slice_constant(graph, node.input[3]) if len(node.input) > 3 else np.array([1])
+    ends = _get_slice_constant(graph, node.input[2])
+    axes = _get_slice_constant(graph, node.input[3]) if len(node.input) > 3 else np.array([1])
 
     # steps is an optional 5th input (ONNX opset 10+); only step=1 is supported.
     if len(node.input) > 4:
         steps = _get_slice_constant(graph, node.input[4])
         if not all(int(s) == 1 for s in steps):
-            raise NotImplementedError(
-                f'ChannelSlice only supports step=1, got steps={list(steps)} '
-                f'in node {node.name}'
-            )
+            raise NotImplementedError(f'ChannelSlice only supports step=1, got steps={list(steps)} in node {node.name}')
 
     # input_shapes[0] = [batch, C, H, W]  (ONNX channels-first, batch included)
     in_shape = input_shapes[0]
@@ -105,16 +103,16 @@ def parse_slice_layer(node, input_names, input_shapes, graph):
     axes_list = list(axes)
     chan_idx = axes_list.index(1) if 1 in axes_list else 0
     start_chan = int(starts[chan_idx])
-    end_chan   = int(ends[chan_idx])
+    end_chan = int(ends[chan_idx])
 
     n_chan_in = in_shape[1]
     # ONNX uses INT64_MAX as a sentinel for "slice to the end"; clamp to actual size
     end_chan = min(end_chan, n_chan_in)
-    layer['n_chan_in']  = n_chan_in
+    layer['n_chan_in'] = n_chan_in
     layer['n_chan_out'] = end_chan - start_chan
     layer['start_chan'] = start_chan
-    layer['in_height']  = in_shape[2]
-    layer['in_width']   = in_shape[3]
+    layer['in_height'] = in_shape[2]
+    layer['in_width'] = in_shape[3]
 
     return layer
 
@@ -122,36 +120,36 @@ def parse_slice_layer(node, input_names, input_shapes, graph):
 @onnx_handler('Unsqueeze')
 def parse_unsqueeze_layer(node, input_names, input_shapes, graph):
     layer = {}
-    layer['name']       = node.name
+    layer['name'] = node.name
     layer['class_name'] = 'Reshape'
-    layer['inputs']     = [input_names[0]]
-    layer['outputs']    = list(node.output)
+    layer['inputs'] = [input_names[0]]
+    layer['outputs'] = list(node.output)
 
     # opset 11: axes is an attribute; opset 13+: axes is the 2nd input tensor
     axes = get_onnx_attribute(node, 'axes')
     if axes is None and len(node.input) > 1:
         axes = list(_get_slice_constant(graph, node.input[1]).astype(int).flat)
 
-    in_shape = list(input_shapes[0])        # [N, d1, d2, ...]
-    n_out    = len(in_shape) + len(axes)    # total output dims (including batch)
+    in_shape = list(input_shapes[0])  # [N, d1, d2, ...]
+    n_out = len(in_shape) + len(axes)  # total output dims (including batch)
 
     out_full = list(in_shape)
     for ax in sorted(int(a) % n_out for a in axes):
         out_full.insert(ax, 1)
 
-    layer['target_shape'] = out_full[1:]    # exclude batch
+    layer['target_shape'] = out_full[1:]  # exclude batch
     return layer
 
 
 @onnx_handler('Squeeze')
 def parse_squeeze_layer(node, input_names, input_shapes, graph):
     layer = {}
-    layer['name']       = node.name
+    layer['name'] = node.name
     layer['class_name'] = 'Reshape'
-    layer['inputs']     = [input_names[0]]
-    layer['outputs']    = list(node.output)
+    layer['inputs'] = [input_names[0]]
+    layer['outputs'] = list(node.output)
 
-    in_shape = list(input_shapes[0])        # [N, d1, d2, ...]
+    in_shape = list(input_shapes[0])  # [N, d1, d2, ...]
 
     # opset 11: axes is an attribute; opset 13+: optional 2nd input tensor
     axes = get_onnx_attribute(node, 'axes')
@@ -162,12 +160,12 @@ def parse_squeeze_layer(node, input_names, input_shapes, graph):
             axes = None
 
     if axes is not None:
-        axes_set  = {int(a) % len(in_shape) for a in axes}
+        axes_set = {int(a) % len(in_shape) for a in axes}
         out_shape = [d for i, d in enumerate(in_shape) if i not in axes_set]
     else:
         out_shape = [d for d in in_shape if d != 1]
 
-    layer['target_shape'] = out_shape[1:]   # exclude batch
+    layer['target_shape'] = out_shape[1:]  # exclude batch
     return layer
 
 

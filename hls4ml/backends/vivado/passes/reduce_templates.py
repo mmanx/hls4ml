@@ -7,9 +7,7 @@ reduce_config_template = """struct config{index} : nnet::reduce_max_config {{
     static const unsigned n_chan    = {n_chan};
 }};\n"""
 
-reduce_function_template = (
-    'nnet::reduce_max_channel<{input_t}, {output_t}, config{index}>({input}, {output});'
-)
+reduce_function_template = 'nnet::reduce_max_channel<{input_t}, {output_t}, config{index}>({input}, {output});'
 
 reduce_include_list = ['nnet_utils/nnet_reduce.h']
 

@@ -9,9 +9,7 @@ slice_config_template = """struct config{index} : nnet::slice_config {{
     static const unsigned start_chan = {start_chan};
 }};\n"""
 
-slice_function_template = (
-    'nnet::channel_slice<{input_t}, {output_t}, config{index}>({input}, {output});'
-)
+slice_function_template = 'nnet::channel_slice<{input_t}, {output_t}, config{index}>({input}, {output});'
 
 slice_include_list = ['nnet_utils/nnet_slice.h']
 

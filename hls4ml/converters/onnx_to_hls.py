@@ -1,9 +1,9 @@
 from hls4ml.model import ModelGraph
 from hls4ml.utils.dependency import requires
 
-
 # ----------------------Helpers---------------------
 _RESERVED_NAMES = {'input'}
+
 
 def sanitize_layer_name(layer):
     new_name = layer['name']

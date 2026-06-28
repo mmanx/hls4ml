@@ -26,12 +26,11 @@ def parse_reducemax_layer(node, input_names, input_shapes, graph):
     # We only support reducing along the channel axis for spatial 2D inputs.
     if axes is None or list(axes) != [1]:
         raise NotImplementedError(
-            f'ChannelReduceMax only supports axes=[1] (channel axis), got axes={axes} '
-            f'in node {node.name}'
+            f'ChannelReduceMax only supports axes=[1] (channel axis), got axes={axes} in node {node.name}'
         )
 
-    layer['n_chan']    = in_shape[1]
+    layer['n_chan'] = in_shape[1]
     layer['in_height'] = in_shape[2]
-    layer['in_width']  = in_shape[3]
+    layer['in_width'] = in_shape[3]
 
     return layer
