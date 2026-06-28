@@ -16,3 +16,9 @@ hls4mlprj_*
 *.ipynb
 *.ipynb_checkpoints/
 *.bak
+*.h5
+*.onnx
+*.npy
+*.npz
+*.pt
+*.pth

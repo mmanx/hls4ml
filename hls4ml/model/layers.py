@@ -219,6 +219,8 @@ class Layer(Serializable):
     def get_input_variable(self, input_name=None) -> TensorVariable:
         if input_name is not None:
             return self.model.get_layer_output_variable(input_name)
+        elif not self.inputs:
+            return None
         else:
             return self.model.get_layer_output_variable(self.inputs[0])
 
@@ -1891,6 +1893,50 @@ class DACombinational(Layer):
         self.add_output_variable(shape)
 
 
+class ChannelReduceMax(Layer):
+    """ReduceMax along the channel axis for a 2D feature map (BAM spatial attention)."""
+
+    _expected_attributes = [
+        Attribute('in_height'),
+        Attribute('in_width'),
+        Attribute('n_chan'),
+    ]
+
+    def initialize(self):
+        h = self.attributes['in_height']
+        w = self.attributes['in_width']
+        # ReduceMax operates in NCHW space; output is [C, H, W] without batch.
+        # keepdims=1: channel axis reduced to 1 → [1, H, W]
+        # keepdims=0: channel axis dropped    → [H, W]
+        if self.attributes.get('keepdims', 1) == 1:
+            shape = [1, h, w]
+        else:
+            shape = [h, w]
+        self.add_output_variable(shape)
+
+
+class ChannelSlice(Layer):
+    """Extract a contiguous range of channels from a 2D feature map (ELAN channel split)."""
+
+    _expected_attributes = [
+        Attribute('in_height'),
+        Attribute('in_width'),
+        Attribute('n_chan_in'),
+        Attribute('n_chan_out'),
+        Attribute('start_chan'),
+    ]
+
+    def initialize(self):
+        # Slice operates in NCHW space; output is [C_out, H, W] without batch.
+        # The Transpose that follows will convert to NHWC for the next channels_last op.
+        shape = [
+            self.attributes['n_chan_out'],
+            self.attributes['in_height'],
+            self.attributes['in_width'],
+        ]
+        self.add_output_variable(shape)
+
+
 layer_map = {
     'Input': Input,
     'InputLayer': Input,
@@ -1972,6 +2018,8 @@ layer_map = {
     # TensorFlow-specific layers:
     'BiasAdd': BiasAdd,
     'DACombinational': DACombinational,
+    'ChannelSlice': ChannelSlice,
+    'ChannelReduceMax': ChannelReduceMax,
 }
 
 

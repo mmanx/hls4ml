@@ -3,10 +3,16 @@ from hls4ml.utils.dependency import requires
 
 
 # ----------------------Helpers---------------------
+_RESERVED_NAMES = {'input'}
+
 def sanitize_layer_name(layer):
     new_name = layer['name']
-    if new_name[0].isdigit():
+    if not new_name:
+        new_name = layer['class_name'].lower() + '_unnamed'
+    elif new_name[0].isdigit():
         new_name = layer['class_name'].lower() + new_name
+    if new_name in _RESERVED_NAMES:
+        new_name = new_name + '_layer'
 
     layer['name'] = new_name
 
@@ -72,6 +78,16 @@ def get_input_shape(graph, node):
             # then try global input.
             vals = [x for x in graph.input if x.name == inp]
         if not vals:
+            # Check initializers (weight / bias tensors not listed in graph.input).
+            init = next((x for x in graph.initializer if x.name == inp), None)
+            if init is not None:
+                rv.append(list(init.dims))
+                continue
+            # Input may be the output of a Constant op (e.g., Slice starts/ends/axes).
+            # These have no shape entry; skip them — handlers read values directly.
+            is_const_op = any(n.op_type == 'Constant' and n.output[0] == inp for n in graph.node)
+            if is_const_op:
+                continue
             raise RuntimeError(f'Could not find the shape for input {inp}')
         dim = list(d.dim_value for d in vals[0].type.tensor_type.shape.dim)
         if dim:
@@ -205,7 +221,6 @@ def parse_onnx_model(onnx_model):
         # We only support ONNX where the first dimension is the batch dimension.
         # Remove the batch dimension in all subsequnt use
         input_layer['input_shape'] = inp_shape[1:]
-
         print('Input shape:', input_layer['input_shape'])
         # Clean the layer name for specific models
         sanitize_layer_name(input_layer)
@@ -235,6 +250,11 @@ def parse_onnx_model(onnx_model):
 
     print('Topology:')
     for node in onnx_model.graph.node:
+        # Constant op nodes carry inline tensor values (e.g., Slice starts/ends/axes).
+        # Individual handlers read them directly via graph.node; skip here.
+        if node.op_type == 'Constant':
+            continue
+
         if node.op_type not in supported_layers:
             raise Exception(f'ERROR: Unsupported operation type: {node.op_type}')
 
@@ -252,10 +272,14 @@ def parse_onnx_model(onnx_model):
             inputs_map[output_name] = input_name
             continue
 
-        input_names = [inputs_map.get(x, x) for x in node.input]
+        input_names = [replace_char_inconsitency(inputs_map.get(x, x)) for x in node.input]
 
         # Process the layer
         layer = layer_handlers[node.op_type](node, input_names, input_shapes, onnx_model.graph)
+
+        # Use first output tensor name as fallback when node has no name (guarantees uniqueness)
+        if not layer.get('name') and node.output:
+            layer['name'] = node.output[0]
 
         sanitize_layer_name(layer)
         print(f'Layer name: {layer["name"]}, layer type: {layer["class_name"]}, current shape: {input_shapes}')
